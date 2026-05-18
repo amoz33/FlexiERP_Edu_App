@@ -54,9 +54,19 @@ export default function InstructorDashboardPage() {
             return (
               <button key={id} onClick={() => setActiveSection(id)}
                 className="flex items-center gap-3 w-full px-4 py-3 mx-2 rounded-lg text-sm transition-all text-left"
+                onMouseEnter={(event) => {
+                  event.currentTarget.style.color = '#C9A020'
+                  if (!active) {
+                    event.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+                  }
+                }}
+                onMouseLeave={(event) => {
+                  event.currentTarget.style.color = active ? '#C9A020' : '#FFFFFF'
+                  event.currentTarget.style.background = active ? 'rgba(201,160,32,0.15)' : 'transparent'
+                }}
                 style={{
                   width: 'calc(100% - 16px)',
-                  color: active ? '#C9A020' : 'rgba(255,255,255,0.70)',
+                  color: active ? '#C9A020' : '#FFFFFF',
                   background: active ? 'rgba(201,160,32,0.15)' : 'transparent',
                   border: active ? '1px solid rgba(201,160,32,0.30)' : '1px solid transparent',
                 }}>
