@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, UserPlus, CreditCard, BookOpen, Package,
   CalendarDays, ClipboardCheck, Settings, Users, Mail,
-  User, BarChart3, ExternalLink, Zap, FileText
+  User, BarChart3, ExternalLink, Zap, FileText, Bell, ClipboardList
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/auth-store'
 import { cn } from '@/lib/utils'
@@ -30,7 +30,9 @@ const adminNavItems = [
 
 const studentNavItems = [
   { label: 'Dashboard',       href: '/dashboard',       icon: LayoutDashboard },
+  { label: 'Assignments/Projects', href: '/projects',   icon: ClipboardList },
   { label: 'Subjects & Scores', href: '/subjects',      icon: BookOpen },
+  { label: 'Scheme of Work',   href: '/scheme-of-work', icon: CalendarDays },
   { label: 'School Fees',     href: '/fees',           icon: CreditCard },
   { label: 'Attendance',      href: '/attendance',      icon: ClipboardCheck },
   { label: 'Report Card',     href: '/report-card',     icon: FileText },
@@ -39,6 +41,7 @@ const studentNavItems = [
 
 const parentNavItems = [
   { label: 'My Children',     href: '/switch',         icon: Users },
+  { label: 'Notifications',   href: '/notifications',  icon: Bell },
   { label: 'Dashboard',       href: '/dashboard',       icon: LayoutDashboard },
   { label: 'Subjects & Scores', href: '/subjects',      icon: BookOpen },
   { label: 'School Fees',     href: '/fees',           icon: CreditCard },

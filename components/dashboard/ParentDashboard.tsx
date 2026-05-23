@@ -33,7 +33,7 @@ export default function ParentDashboard() {
     <div style={{ display: 'grid', gap: 24 }}>
       <div>
         <p style={{ margin: 0, fontSize: 11, color: TEXT3, letterSpacing: 1.2, textTransform: 'uppercase', fontFamily: 'monospace' }}>
-          {mockParentData.term} · {mockParentData.session}
+          {mockParentData.term} / {mockParentData.session}
         </p>
         <h1 style={{ margin: '10px 0 0', fontSize: 32, fontFamily: "'Georgia',serif", fontWeight: 700, color: TEXT }}>
           Parent Dashboard
@@ -66,7 +66,7 @@ export default function ParentDashboard() {
             <Avatar initials={child.avatar} size={44} />
             <div>
               <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: TEXT }}>{child.name}</p>
-              <p style={{ margin: '4px 0 0', color: TEXT2, fontSize: 12 }}>{child.class} · {child.level}</p>
+              <p style={{ margin: '4px 0 0', color: TEXT2, fontSize: 12 }}>{child.class} / {child.level}</p>
             </div>
           </button>
         ))}
@@ -74,7 +74,7 @@ export default function ParentDashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16 }}>
         <StatCard label="Attendance" value={`${selectedChild.attendance}%`} sub="This term" color={GREEN} />
-        <StatCard label="Fees Due" value={`₦${selectedChild.feesDue.toLocaleString()}`} sub="Balance" color={RED} />
+        <StatCard label="Fees Due" value={`NGN ${selectedChild.feesDue.toLocaleString()}`} sub="Balance" color={RED} />
         <StatCard label="Class Position" value={`${selectedChild.position}th`} sub="In class" color={BLUE} />
         <StatCard label="Child ID" value={selectedChild.id} sub={selectedChild.level} color={GOLD} />
       </div>

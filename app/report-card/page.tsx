@@ -2,8 +2,9 @@
 import { useState } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import Topbar from '@/components/layout/Topbar'
-import { Printer, BookOpen, Download, ChevronDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Printer, BookOpen, Download } from 'lucide-react'
+import { useAuthStore } from '@/lib/auth-store'
+import { ReportCard as PortalReportCard } from '@/components/portal/PortalViews'
 
 const GRADING_SCALE = [
   { grade: 'A+', range: '90 – 100' },
@@ -31,8 +32,19 @@ const GRAND_GRADE  = 'A+'
 
 export default function ReportCardPage() {
   const [filter, setFilter] = useState({ examType: 'Mid Terms', class: 'Grade 10', section: 'Section A', student: 'Student Name 1' })
+  const { role } = useAuthStore()
 
   const handlePrint = () => window.print()
+
+  if (role === 'student' || role === 'parent') {
+    return (
+      <AppLayout>
+        <div className="px-6 py-6">
+          <PortalReportCard />
+        </div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout>

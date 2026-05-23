@@ -1,4 +1,4 @@
-import { LayoutDashboard, BookOpen, Banknote, CalendarCheck, FileText, Users } from 'lucide-react'
+import { LayoutDashboard, BookOpen, Banknote, CalendarCheck, FileText, Users, Bell, ClipboardList } from 'lucide-react'
 import { NavItem } from './portalTypes'
 
 export const GOLD = '#C9A020'
@@ -87,7 +87,70 @@ export const mockData = {
       principalRemark: 'An excellent student who demonstrates diligence and commitment. Keep it up!',
       formTeacherRemark: 'Chidinma is a joy to teach. Her performance this term has been outstanding.',
     },
+    projects: [
+      {
+        title: 'Solar-Powered School Garden',
+        subject: 'Physics',
+        teacher: 'Mr. Lawal',
+        dueDate: 'Mar 8, 2026',
+        status: 'In Progress',
+        progress: 68,
+        brief: 'Build a small garden irrigation model that uses a solar cell to trigger water flow.',
+      },
+      {
+        title: 'Community Health Awareness Poster',
+        subject: 'Biology',
+        teacher: 'Mr. Emeka',
+        dueDate: 'Mar 12, 2026',
+        status: 'Draft Review',
+        progress: 42,
+        brief: 'Create a visual guide that explains malaria prevention steps for younger students.',
+      },
+      {
+        title: 'Nigerian Literature Reflection',
+        subject: 'Literature in English',
+        teacher: 'Mrs. Nwosu',
+        dueDate: 'Mar 18, 2026',
+        status: 'Not Started',
+        progress: 12,
+        brief: 'Write a short reflective essay on character growth in the assigned novel.',
+      },
+    ],
   },
+  parentNotifications: [
+    {
+      title: 'Second term PTA meeting',
+      child: 'All children',
+      category: 'Meeting',
+      time: 'Today, 9:30 AM',
+      priority: 'High',
+      message: 'Parents are invited for the second term PTA meeting in the school hall this Friday by 2:00 PM.',
+    },
+    {
+      title: 'Fee balance reminder',
+      child: 'Chidinma Okafor',
+      category: 'Fees',
+      time: 'Yesterday, 4:12 PM',
+      priority: 'High',
+      message: 'A balance remains on the current term invoice. Kindly complete payment before examination clearance.',
+    },
+    {
+      title: 'Science project approval',
+      child: 'Chidinma Okafor',
+      category: 'Academics',
+      time: 'Mon, 11:05 AM',
+      priority: 'Normal',
+      message: 'The Physics project topic has been approved by Mr. Lawal and can now move to prototype stage.',
+    },
+    {
+      title: 'Attendance commendation',
+      child: 'Blessing Okafor',
+      category: 'Attendance',
+      time: 'Fri, 8:00 AM',
+      priority: 'Normal',
+      message: 'Blessing maintained perfect attendance last week. Thank you for supporting punctual arrival.',
+    },
+  ],
   children: [
     { name: 'Chidinma Okafor', id: 'GFA-SS2-0047', class: 'SS2A', level: 'Senior Secondary', avatar: 'CO' },
     { name: 'Emeka Okafor', id: 'GFA-JSS1-0112', class: 'JSS1B', level: 'Junior Secondary', avatar: 'EO' },
@@ -97,10 +160,15 @@ export const mockData = {
 
 export const NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+  { id: 'projects', label: 'Assignments/Projects', Icon: ClipboardList },
+  { id: 'scheme', label: 'Scheme of Work', Icon: BookOpen },
   { id: 'subjects', label: 'Subjects & Scores', Icon: BookOpen },
   { id: 'fees', label: 'School Fees', Icon: Banknote },
   { id: 'attendance', label: 'Attendance', Icon: CalendarCheck },
   { id: 'reportcard', label: 'Report Card', Icon: FileText },
 ]
 
-export const PARENT_NAV: NavItem[] = [{ id: 'switch', label: 'My Children', Icon: Users }]
+export const PARENT_NAV: NavItem[] = [
+  { id: 'switch', label: 'My Children', Icon: Users },
+  { id: 'notifications', label: 'Notifications', Icon: Bell },
+]

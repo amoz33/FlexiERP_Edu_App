@@ -206,9 +206,10 @@ export default function Navbar({ userName, userRole, userEmail, settingsHref = '
                 <div style={{ fontSize: 12, color: '#6B6660', marginTop: 2 }}>{unreadCount} unread updates</div>
               </div>
               {notifications.map((notification) => (
-                <button
+                <Link
                   key={notification.id}
-                  type="button"
+                  href="/notifications"
+                  onClick={() => setShowNotifications(false)}
                   onMouseEnter={(event) => { event.currentTarget.style.background = '#F7F6F3' }}
                   onMouseLeave={(event) => { event.currentTarget.style.background = notification.isRead ? 'white' : 'rgba(201,160,32,0.05)' }}
                   style={{
@@ -222,6 +223,7 @@ export default function Navbar({ userName, userRole, userEmail, settingsHref = '
                     display: 'flex',
                     gap: 10,
                     fontFamily: 'inherit',
+                    textDecoration: 'none',
                   }}
                 >
                   <span style={{ width: 8, height: 8, marginTop: 6, borderRadius: 999, background: typeColor[notification.type] || GOLD, flexShrink: 0 }} />
@@ -230,7 +232,7 @@ export default function Navbar({ userName, userRole, userEmail, settingsHref = '
                     <span style={{ display: 'block', fontSize: 13, color: '#6B6660', marginTop: 2 }}>{notification.message}</span>
                     <span style={{ display: 'block', fontSize: 12, color: '#A09080', marginTop: 5 }}>{notification.time}</span>
                   </span>
-                </button>
+                </Link>
               ))}
             </div>
           )}

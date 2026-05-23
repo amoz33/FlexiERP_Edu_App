@@ -3,7 +3,8 @@ import { useState } from 'react'
 import Navbar from '@/components/layout/Navbar'
 import AppFooter from '@/components/layout/AppFooter'
 import PortalSidebar from './PortalSidebar'
-import { Dashboard, Subjects, Fees, Attendance, ReportCard, ParentSwitch } from './PortalViews'
+import { Dashboard, Subjects, Fees, Attendance, ReportCard, ParentSwitch, ParentNotifications, StudentProjects } from './PortalViews'
+import { SchemeOfWorkView } from '@/components/dashboard/StudentDashboard'
 import { PageType, RoleType } from './portalTypes'
 
 const PAGE_TITLES: Record<PageType, string> = {
@@ -13,6 +14,9 @@ const PAGE_TITLES: Record<PageType, string> = {
   attendance: 'Attendance',
   reportcard: 'Report Card',
   switch: 'My Children',
+  notifications: 'Notifications',
+  projects: 'Assignments/Projects',
+  scheme: 'Scheme of Work',
 }
 
 export default function PortalPage() {
@@ -37,6 +41,12 @@ export default function PortalPage() {
         return <ReportCard />
       case 'switch':
         return <ParentSwitch activeChild={activeChild} setActiveChild={setActiveChild} />
+      case 'notifications':
+        return <ParentNotifications />
+      case 'projects':
+        return <StudentProjects />
+      case 'scheme':
+        return <SchemeOfWorkView />
       default:
         return <Dashboard role={role} />
     }

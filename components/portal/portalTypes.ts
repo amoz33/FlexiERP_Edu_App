@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 
 export type RoleType = 'student' | 'parent'
-export type PageType = 'dashboard' | 'subjects' | 'fees' | 'attendance' | 'reportcard' | 'switch'
+export type PageType = 'dashboard' | 'subjects' | 'fees' | 'attendance' | 'reportcard' | 'switch' | 'notifications' | 'projects' | 'scheme'
 
 export type NavItem = {
   id: string

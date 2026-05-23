@@ -15,6 +15,7 @@ export const BLUE = "#378ADD";
 // Navigation
 export const STUDENT_NAV = [
   { id: "dashboard", label: "Dashboard", icon: "LayoutDashboard", href: "/dashboard" },
+  { id: "projects", label: "Projects", icon: "ClipboardList", href: "/projects" },
   { id: "subjects", label: "Subjects & Scores", icon: "BookOpen", href: "/subjects" },
   { id: "fees", label: "School Fees", icon: "Banknote", href: "/fees" },
   { id: "attendance", label: "Attendance", icon: "CalendarCheck", href: "/attendance" },
@@ -23,6 +24,7 @@ export const STUDENT_NAV = [
 
 export const PARENT_NAV = [
   { id: "switch", label: "My Children", icon: "Users", href: "/switch" },
+  { id: "notifications", label: "Notifications", icon: "Bell", href: "/notifications" },
   { id: "dashboard", label: "Dashboard", icon: "LayoutDashboard", href: "/dashboard" },
   { id: "subjects", label: "Subjects & Scores", icon: "BookOpen", href: "/subjects" },
   { id: "fees", label: "School Fees", icon: "Banknote", href: "/fees" },
