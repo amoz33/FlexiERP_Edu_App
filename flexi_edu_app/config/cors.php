@@ -27,6 +27,8 @@ return [
 
     'allowed_origins_patterns' => [],
 
+    'supports_credentials' => true,
+
     'allowed_headers' => ['*'],
 
     'exposed_headers' => [],
