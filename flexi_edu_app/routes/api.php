@@ -69,8 +69,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ── Academics ─────────────────────────────────────────────────────────────
     Route::prefix('academics')->group(function () {
-        Route::get('classes',  [AcademicsController::class, 'getClasses']);
-        Route::get('subjects', [AcademicsController::class, 'getSubjects']);
+        Route::get('classes',              [AcademicsController::class, 'getClasses']);
+        Route::get('subjects',             [AcademicsController::class, 'getSubjects']);
+        Route::get('all-subjects',         [AcademicsController::class, 'allSubjects']);
+        Route::post('subjects',            [AcademicsController::class, 'createSubject']);
+        Route::put('subjects/{assignment}', [AcademicsController::class, 'updateSubject']);
+        Route::delete('subjects/{assignment}', [AcademicsController::class, 'deleteSubject']);
+        Route::get('staff',                [AcademicsController::class, 'getStaff']);
     });
 
     // ── Admissions ────────────────────────────────────────────────────────────
