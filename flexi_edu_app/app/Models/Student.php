@@ -26,6 +26,13 @@ class Student extends Model
         'school_id',
         'status',
         'enrollment_date',
+        'avatar', 
+        'blood_group', 
+        'genotype', 
+        'allergies',
+        'medical_conditions', 
+        'medications', 
+        'medical_notes',
     ];
 
     protected $casts = [

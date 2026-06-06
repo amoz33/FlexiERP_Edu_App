@@ -42,6 +42,7 @@ class AttendanceController extends Controller
             'id'     => (string) $s->id,
             'name'   => $s->first_name . ' ' . $s->last_name,
             'avatar' => strtoupper(substr($s->first_name, 0, 1) . substr($s->last_name, 0, 1)),
+            'rollNo' => $s->student_id,   // admission/roll number shown in table
             'status' => $this->mapStatus($existing->get($s->id, 'present')),
         ]);
 

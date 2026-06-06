@@ -192,18 +192,23 @@ class TeacherController extends Controller
 
         if (!$staff) return response()->json(['message' => 'Staff record not found.'], 404);
 
-        $assignments = StaffSubjectAssignment::with(['section.academicClass', 'subject'])
+        $assignments = StaffSubjectAssignment::with(['section', 'subject'])
             ->where('staff_id', $staff->id)
             ->where('school_id', $schoolId)
             ->get();
 
+        // Return ALL section+subject combinations without deduplication.
+        // A teacher may teach multiple subjects in the same class section.
+        // Frontend groups by section id for the class dropdown,
+        // then populates subjects from all entries matching that section id.
         $groups = $assignments->map(fn($a) => [
             'id'           => (string) $a->class_section_id,
-            'name'         => $a->section?->full_name ?? '—',
+            'name'         => $a->section?->full_name ?? $a->section?->name ?? '—',
             'section'      => $a->section?->name ?? '—',
             'subject'      => $a->subject?->name ?? '—',
+            'subject_id'   => $a->subject_id,
             'studentCount' => Student::where('class_section_id', $a->class_section_id)->active()->count(),
-        ])->unique('id')->values();
+        ])->values();
 
         return response()->json($groups);
     }
@@ -254,17 +259,18 @@ class TeacherController extends Controller
         if ($sectionId) $query->where('class_section_id', $sectionId);
 
         $assessments = $query->orderByDesc('date')->get()->map(fn($a) => [
-            'id'       => (string) $a->id,
-            'title'    => $a->title,
-            'type'     => $a->type,
-            'category' => $a->category,
-            'group'    => $a->section?->full_name ?? '—',
-            'group_id' => (string) $a->class_section_id,
-            'subject'  => $a->subject?->name ?? '—',
-            'date'     => $a->date->toDateString(),
-            'maxMarks' => $a->max_marks,
-            'weight'   => $a->weight,
-            'status'   => $a->status,
+            'id'         => (string) $a->id,
+            'title'      => $a->title,
+            'type'       => $a->type,
+            'category'   => $a->category,
+            'group'      => $a->section?->full_name ?? '—',
+            'group_id'   => (string) $a->class_section_id,
+            'subject'    => $a->subject?->name ?? '—',
+            'subject_id' => $a->subject_id,          // ← was missing, needed for frontend filtering
+            'date'       => $a->date->toDateString(),
+            'maxMarks'   => $a->max_marks,
+            'weight'     => $a->weight,
+            'status'     => $a->status,
         ]);
 
         return response()->json($assessments);
@@ -438,24 +444,164 @@ class TeacherController extends Controller
             ->where('school_id', $schoolId)
             ->orderByDesc('created_at')
             ->get()
-            ->map(fn($p) => [
-                'id'         => (string) $p->id,
-                'title'      => $p->title,
-                'subject'    => $p->subject?->name ?? '—',
-                'group'      => $p->section?->full_name ?? '—',
-                'week'       => $p->week_label,
-                'day'        => $p->day,
-                'period'     => $p->period_number,
-                'duration'   => $p->duration,
-                'objectives' => $p->objectives,
-                'activities' => $p->activities,
-                'resources'  => $p->resources,
-                'homework'   => $p->homework,
-                'status'     => $p->status,
-                'createdAt'  => $p->created_at->toDateString(),
-            ]);
+            ->map(fn($p) => $this->formatPlan($p));
 
         return response()->json($plans);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | POST /api/teacher/lesson-plans
+    |--------------------------------------------------------------------------
+    | Create a new lesson plan
+    */
+    public function storeLessonPlan(Request $request): JsonResponse
+    {
+        $schoolId = $request->user()->school_id;
+        $staff    = $this->getStaff($request);
+        if (!$staff) return response()->json(['message' => 'Staff record not found.'], 404);
+
+        $request->validate([
+            'title'            => 'required|string|max:255',
+            'subject_id'       => 'required|integer|exists:subjects,id',
+            'class_section_id' => 'required|integer|exists:class_sections,id',
+            'week_label'       => 'required|string|max:100',
+            'day'              => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday',
+            'period_number'    => 'required|integer|min:1|max:12',
+            'duration'         => 'nullable|string|max:50',
+            'objectives'       => 'nullable|array',
+            'activities'       => 'nullable|array',
+            'resources'        => 'nullable|array',
+            'homework'         => 'nullable|string',
+            'status'           => 'in:draft,published,completed',
+            'academic_term'    => 'nullable|string',
+        ]);
+
+        $plan = LessonPlan::create([
+            'title'            => $request->title,
+            'subject_id'       => $request->subject_id,
+            'class_section_id' => $request->class_section_id,
+            'staff_id'         => $staff->id,
+            'week_label'       => $request->week_label,
+            'day'              => $request->day,
+            'period_number'    => $request->period_number,
+            'duration'         => $request->duration ?? '45 mins',
+            'objectives'       => $request->objectives ?? [],
+            'activities'       => $request->activities ?? [],
+            'resources'        => $request->resources  ?? [],
+            'homework'         => $request->homework,
+            'status'           => $request->status ?? 'draft',
+            'academic_term'    => $request->academic_term ?? $this->currentTerm(),
+            'school_id'        => $schoolId,
+        ]);
+
+        $plan->load(['subject', 'section']);
+
+        return response()->json([
+            'message' => 'Lesson plan created.',
+            'plan'    => $this->formatPlan($plan),
+        ], 201);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PUT /api/teacher/lesson-plans/{plan}
+    |--------------------------------------------------------------------------
+    */
+    public function updateLessonPlan(Request $request, LessonPlan $plan): JsonResponse
+    {
+        $staff = $this->getStaff($request);
+        if (!$staff || $plan->staff_id !== $staff->id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate([
+            'title'         => 'sometimes|string|max:255',
+            'week_label'    => 'sometimes|string|max:100',
+            'day'           => 'sometimes|in:Monday,Tuesday,Wednesday,Thursday,Friday',
+            'period_number' => 'sometimes|integer|min:1|max:12',
+            'duration'      => 'nullable|string|max:50',
+            'objectives'    => 'nullable|array',
+            'activities'    => 'nullable|array',
+            'resources'     => 'nullable|array',
+            'homework'      => 'nullable|string',
+            'status'        => 'sometimes|in:draft,published,completed',
+        ]);
+
+        $plan->update($request->only([
+            'title', 'week_label', 'day', 'period_number',
+            'duration', 'objectives', 'activities', 'resources',
+            'homework', 'status',
+        ]));
+
+        $plan->load(['subject', 'section']);
+
+        return response()->json([
+            'message' => 'Lesson plan updated.',
+            'plan'    => $this->formatPlan($plan),
+        ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | DELETE /api/teacher/lesson-plans/{plan}
+    |--------------------------------------------------------------------------
+    */
+    public function deleteLessonPlan(Request $request, LessonPlan $plan): JsonResponse
+    {
+        $staff = $this->getStaff($request);
+        if (!$staff || $plan->staff_id !== $staff->id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $plan->delete();
+
+        return response()->json(['message' => 'Lesson plan deleted.']);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Helper: format a lesson plan for API response
+    |--------------------------------------------------------------------------
+    */
+    private function formatPlan(LessonPlan $p): array
+    {
+        return [
+            'id'         => (string) $p->id,
+            'title'      => $p->title,
+            'subject'    => $p->subject?->name ?? '—',
+            'subject_id' => $p->subject_id,
+            'group'      => $p->section?->full_name ?? '—',
+            'section_id' => $p->class_section_id,
+            'week'       => $p->week_label,
+            'day'        => $p->day,
+            'period'     => $p->period_number,
+            'duration'   => $p->duration,
+            'objectives' => $p->objectives ?? [],
+            'activities' => $p->activities ?? [],
+            'resources'  => $p->resources  ?? [],
+            'homework'   => $p->homework ?? '',
+            'status'     => $p->status,
+            'createdAt'  => $p->created_at->toDateString(),
+        ];
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Helper: current academic term label
+    |--------------------------------------------------------------------------
+    */
+    private function currentTerm(): string
+    {
+        $month = now()->month;
+        $year  = now()->year;
+        $term  = match(true) {
+            $month <= 4  => 'Term 2',
+            $month <= 8  => 'Term 3',
+            default      => 'Term 1',
+        };
+        return "{$year}/{$term}";
     }
 
     /*
