@@ -16,14 +16,22 @@ class Student extends Model
 
     protected $fillable = [
         'student_id',
+        'admission_no',
         'first_name',
         'last_name',
         'email',
         'phone',
+        'gender',
+        'date_of_birth',
+        'address',
         'grade',
         'section',
         'class_section_id',
+        'parent_name',
+        'parent_phone',
+        'parent_email',
         'school_id',
+        'user_id',
         'status',
         'enrollment_date',
         'avatar', 
@@ -37,6 +45,7 @@ class Student extends Model
 
     protected $casts = [
         'enrollment_date' => 'date',
+        'date_of_birth' => 'date',
     ];
 
     /*
@@ -64,6 +73,11 @@ class Student extends Model
     public function attendance(): HasMany
     {
         return $this->hasMany(Attendance::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function feePayments(): HasMany

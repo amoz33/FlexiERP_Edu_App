@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Staff;
+use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class StaffController extends Controller
 {
@@ -23,7 +25,7 @@ class StaffController extends Controller
         $schoolId = $request->user()->school_id;
         $perPage  = min((int) $request->query('per_page', 20), 100);
 
-        $query = Staff::with('department')
+        $query = Staff::with('department', 'user')
             ->forSchool($schoolId)
             ->orderBy('first_name');
 
@@ -62,7 +64,7 @@ class StaffController extends Controller
     public function show(Request $request, Staff $staff): JsonResponse
     {
         abort_if($staff->school_id !== $request->user()->school_id, 403);
-        $staff->load('department');
+        $staff->load('department', 'user');
         return response()->json(['data' => $this->detail($staff)]);
     }
 
@@ -87,6 +89,10 @@ class StaffController extends Controller
         ], [
             'email.unique' => 'A staff member with this email already exists.',
         ]);
+
+        if ($request->filled('email')) {
+            $this->assertPortalEmailAvailable(trim((string) $request->email));
+        }
 
         $count   = Staff::where('school_id', $schoolId)->count();
         $staffId = 'STF-' . date('Y') . '-' . str_pad($count + 1, 3, '0', STR_PAD_LEFT);
@@ -122,6 +128,11 @@ class StaffController extends Controller
                 'status'     => $statusMap[$request->status] ?? 'active',
                 'school_id'  => $schoolId,
             ]);
+
+            $portalCredentials = null;
+            if (trim((string) $staff->email) !== '') {
+                $portalCredentials = $this->upsertStaffPortalAccount($staff, Str::password(10));
+            }
         } catch (UniqueConstraintViolationException $e) {
             return response()->json([
                 'message' => 'A staff member with this email already exists.',
@@ -129,11 +140,12 @@ class StaffController extends Controller
             ], 422);
         }
 
-        $staff->load('department');
+        $staff->load('department', 'user');
 
         return response()->json([
             'message' => 'Staff added.',
             'data'    => $this->row($staff),
+            'portal_credentials' => $portalCredentials,
         ], 201);
     }
 
@@ -159,6 +171,10 @@ class StaffController extends Controller
         ], [
             'email.unique' => 'This email is already used by another staff member.',
         ]);
+
+        if ($request->has('email')) {
+            $this->assertPortalEmailAvailable($request->filled('email') ? trim((string) $request->email) : '', $staff->user_id);
+        }
 
         if ($request->hasFile('avatar') && $request->file('avatar')->isValid()) {
             if ($staff->avatar) Storage::disk('public')->delete($staff->avatar);
@@ -191,7 +207,8 @@ class StaffController extends Controller
                                 : $staff->status,
         ])->save();
 
-        $staff->load('department');
+        $this->syncPortalUserFromStaff($staff);
+        $staff->load('department', 'user');
 
         return response()->json([
             'message' => 'Staff updated.',
@@ -212,10 +229,48 @@ class StaffController extends Controller
         return response()->json(['message' => 'Staff deleted.']);
     }
 
+    public function generatePortalCredentials(Request $request, Staff $staff): JsonResponse
+    {
+        abort_if($staff->school_id !== $request->user()->school_id, 403);
+
+        $credentials = $this->upsertStaffPortalAccount($staff, Str::password(10));
+        $staff->load('department', 'user');
+
+        return response()->json([
+            'message' => 'Staff portal credentials generated.',
+            'data' => [
+                'staff' => $this->detail($staff),
+                'portal_credentials' => $credentials,
+            ],
+        ]);
+    }
+
+    public function updatePortalPassword(Request $request, Staff $staff): JsonResponse
+    {
+        abort_if($staff->school_id !== $request->user()->school_id, 403);
+
+        $payload = $request->validate([
+            'password' => 'required|string|min:8|max:255',
+        ]);
+
+        $credentials = $this->upsertStaffPortalAccount($staff, (string) $payload['password']);
+        $staff->load('department', 'user');
+
+        return response()->json([
+            'message' => 'Staff portal password updated.',
+            'data' => [
+                'staff' => $this->detail($staff),
+                'portal_credentials' => $credentials,
+            ],
+        ]);
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private function row(Staff $s): array
     {
+        $storageBaseUrl = rtrim(request()->getSchemeAndHttpHost(), '/') . '/storage/';
+
         return [
             'id'         => $s->id,
             'staff_id'   => $s->staff_id,
@@ -231,7 +286,9 @@ class StaffController extends Controller
             'status'     => $this->displayStatus($s->status),
             'bank_name'  => $s->bank_name,
             'base_pay'   => $s->base_pay,
-            'avatar_url' => $s->avatar ? asset('storage/' . $s->avatar) : null,
+            'avatar_url' => $s->avatar ? $storageBaseUrl . ltrim($s->avatar, '/') : null,
+            'has_portal_account' => (bool) $s->user_id,
+            'portal_email' => $s->email,
         ];
     }
 
@@ -249,5 +306,109 @@ class StaffController extends Controller
             'inactive' => 'Inactive',
             default    => 'Active',
         };
+    }
+
+    private function syncPortalUserFromStaff(Staff $staff): void
+    {
+        if (!$staff->user_id) {
+            return;
+        }
+
+        $user = $staff->relationLoaded('user') ? $staff->getRelation('user') : $staff->user;
+        if (!$user) {
+            return;
+        }
+
+        $staffName = trim($staff->first_name . ' ' . $staff->last_name);
+        $nextEmail = trim((string) $staff->email);
+
+        if ($nextEmail !== '' && $nextEmail !== $user->email) {
+            $this->assertPortalEmailAvailable($nextEmail, $user->id);
+            $user->email = $nextEmail;
+        }
+
+        $user->name = $staffName;
+        $user->save();
+    }
+
+    private function upsertStaffPortalAccount(Staff $staff, string $plainPassword): array
+    {
+        $email = trim((string) $staff->email);
+        if ($email === '') {
+            throw ValidationException::withMessages([
+                'email' => 'Staff email is required before generating instructor credentials.',
+            ]);
+        }
+
+        $staffName = trim($staff->first_name . ' ' . $staff->last_name);
+        $user = $staff->user_id
+            ? User::find($staff->user_id)
+            : User::where('email', $email)->first();
+
+        if ($user && $user->role !== 'teacher') {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already used by another non-instructor account.',
+            ]);
+        }
+
+        if ($user && (string) $user->school_id !== (string) $staff->school_id) {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already linked to another school account.',
+            ]);
+        }
+
+        if ($user && Staff::where('user_id', $user->id)->where('id', '!=', $staff->id)->exists()) {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already linked to another instructor portal account.',
+            ]);
+        }
+
+        if (!$user) {
+            $user = User::create([
+                'name' => $staffName,
+                'email' => $email,
+                'password' => $plainPassword,
+                'role' => 'teacher',
+                'school_id' => $staff->school_id,
+                'is_active' => true,
+            ]);
+        } else {
+            $user->update([
+                'name' => $staffName,
+                'email' => $email,
+                'password' => $plainPassword,
+                'role' => 'teacher',
+                'school_id' => $staff->school_id,
+                'is_active' => true,
+            ]);
+        }
+
+        if ((int) $staff->user_id !== (int) $user->id) {
+            $staff->user_id = $user->id;
+            $staff->save();
+        }
+
+        return [
+            'email' => $email,
+            'password' => $plainPassword,
+        ];
+    }
+
+    private function assertPortalEmailAvailable(string $email, ?int $ignoreUserId = null): void
+    {
+        if ($email === '') {
+            return;
+        }
+
+        $query = User::where('email', $email);
+        if ($ignoreUserId) {
+            $query->where('id', '!=', $ignoreUserId);
+        }
+
+        if ($query->exists()) {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already used by another portal account.',
+            ]);
+        }
     }
 }

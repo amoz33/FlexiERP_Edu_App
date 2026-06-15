@@ -8,10 +8,12 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\FeeController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\StaffController;
+use App\Http\Controllers\Api\ResultsController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentPortalController;
 use App\Http\Controllers\Api\TeacherController;
 use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\AssignmentController; 
 use App\Http\Controllers\Api\TeacherAssignmentController;
 use App\Http\Controllers\Api\AdminAssignmentController;
@@ -28,6 +30,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->group(function () {
     Route::post('login',  [AuthController::class, 'login']);
 });
+
+Route::get('public/school', [SettingsController::class, 'publicSchool']);
+Route::get('public/classes', [SettingsController::class, 'publicClasses']);
 
 Route::post('admissions', [AdmissionController::class, 'store']);
 
@@ -53,11 +58,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ── Students ──────────────────────────────────────────────────────────────
     Route::get('students/class-sections',   [StudentController::class, 'classSections']); 
+    Route::post('students/class-sections',  [StudentController::class, 'storeClassSection']);
+    Route::delete('students/class-sections',[StudentController::class, 'destroyClassSection']);
     Route::post('students/bulk-import',     [StudentController::class, 'bulkImport']);    
     Route::get('students',                  [StudentController::class, 'index']);
     Route::get('students/{student}',        [StudentController::class, 'show']);
     Route::post('students',                 [StudentController::class, 'store']);
     Route::post('students/{student}',       [StudentController::class, 'update']);         
+    Route::post('students/{student}/portal-credentials', [StudentController::class, 'generatePortalCredentials']);
+    Route::put('students/{student}/portal-password',     [StudentController::class, 'updatePortalPassword']);
     Route::delete('students/{student}',     [StudentController::class, 'destroy']);
 
     // ── Staff ─────────────────────────────────────────────────────────────────
@@ -65,7 +74,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('staff/{staff}',       [StaffController::class, 'show']);
     Route::post('staff',         [StaffController::class, 'store']); 
     Route::post('staff/{staff}', [StaffController::class, 'update']);
+    Route::post('staff/{staff}/portal-credentials', [StaffController::class, 'generatePortalCredentials']);
+    Route::put('staff/{staff}/portal-password',     [StaffController::class, 'updatePortalPassword']);
     Route::delete('staff/{staff}',[StaffController::class, 'destroy']);
+
+    Route::get('results/selections', [ResultsController::class, 'selections']);
+    Route::get('results/view', [ResultsController::class, 'view']);
 
     // ── Academics ─────────────────────────────────────────────────────────────
     Route::prefix('academics')->group(function () {
@@ -100,9 +114,33 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ── Fees (admin) ─────────────────────────────────────────────────────────
     Route::get('fees/dashboard', [FeeController::class, 'dashboard']);
+    Route::post('fees/items', [FeeController::class, 'store']);
+    Route::put('fees/items/{feeType}', [FeeController::class, 'update']);
+    Route::delete('fees/items/{feeType}', [FeeController::class, 'destroy']);
+
+    // ── Settings ─────────────────────────────────────────────────────────────
+    Route::prefix('settings')->group(function () {
+        Route::get('general',         [SettingsController::class, 'general']);
+        Route::post('general',        [SettingsController::class, 'saveGeneral']);
+        Route::get('result-controls', [SettingsController::class, 'resultControls']);
+        Route::post('result-controls',[SettingsController::class, 'saveResultControls']);
+        Route::get('classes',         [SettingsController::class, 'classes']);
+        Route::post('classes',        [SettingsController::class, 'storeClass']);
+        Route::put('classes/{academicClass}', [SettingsController::class, 'updateClass']);
+        Route::delete('classes/{academicClass}', [SettingsController::class, 'destroyClass']);
+        Route::get('terms',           [SettingsController::class, 'terms']);
+        Route::post('terms',          [SettingsController::class, 'storeTerm']);
+        Route::put('terms/{term}',    [SettingsController::class, 'updateTerm']);
+        Route::delete('terms/{term}', [SettingsController::class, 'destroyTerm']);
+    });
 
     // ── Inventory ─────────────────────────────────────────────────────────────
     Route::get('inventory', [InventoryController::class, 'index']);
+    Route::get('inventory/categories', [InventoryController::class, 'categories']);
+    Route::get('inventory/history', [InventoryController::class, 'history']);
+    Route::post('inventory/categories', [InventoryController::class, 'storeCategory']);
+    Route::post('inventory/add-stock', [InventoryController::class, 'addStock']);
+    Route::post('inventory/issue-stock', [InventoryController::class, 'issueStock']);
 
     // ── Teacher Portal ────────────────────────────────────────────────────────
     Route::prefix('teacher')->group(function () {

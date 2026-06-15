@@ -15,6 +15,7 @@ return new class extends Migration
             $table->date('date');
             $table->enum('status', ['present', 'absent', 'late', 'excused'])->default('present');
             $table->text('note')->nullable();
+             $table->unsignedBigInteger('staff_id')->nullable(); 
             $table->timestamps();
 
             // One record per student per day

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicTerm;
 use App\Models\Assessment;
 use App\Models\Attendance;
 use App\Models\FeePayment;
@@ -373,36 +374,54 @@ class StudentPortalController extends Controller
         $student  = $this->resolveStudent($request);
         if (!$student) return response()->json(['message' => 'Student not found.'], 404);
 
-        $payments = FeePayment::with('feeType')
+        $schoolId = (string) $request->user()->school_id;
+        $termId = $this->resolveFeeTerm($request, $schoolId);
+
+        $studentClassName = (string) ($student->section?->academicClass?->name ?? '');
+
+        $feeTypes = FeeType::where('school_id', $schoolId)
+            ->where('academic_term', $termId)
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (FeeType $feeType) => $this->feeAppliesToStudentClass((string) $feeType->applicable_class, $studentClassName))
+            ->values();
+
+        $feeBreakdown = $feeTypes->map(fn (FeeType $feeType) => [
+            'label'  => (string) $feeType->name,
+            'amount' => (float) $feeType->amount,
+        ])->values();
+
+        $totalDue = (float) $feeTypes->sum('amount');
+
+        $paidAmountForTerm = (float) FeePayment::where('school_id', $schoolId)
             ->where('student_id', $student->id)
-            ->orderByDesc('created_at')
+            ->where('academic_term', $termId)
+            ->where('status', 'paid')
+            ->sum('amount');
+
+        $outstanding = max(0, $totalDue - $paidAmountForTerm);
+
+        $payments = FeePayment::with('feeType')
+            ->where('school_id', $schoolId)
+            ->where('student_id', $student->id)
+            ->orderByDesc('paid_at')
+            ->orderByDesc('updated_at')
             ->get();
 
-        $currentTerm     = $payments->take(5);
-        $totalDue        = $currentTerm->sum('expected_amount');
-        $totalPaid       = $payments->where('status', 'paid')->sum('amount');
-        $outstanding     = max(0, $totalDue - $totalPaid);
-
-        $feeBreakdown = $currentTerm->map(fn($p) => [
-            'label'  => $p->feeType?->name ?? $p->description ?? 'Fee',
-            'amount' => $p->expected_amount,
-            'status' => ucfirst($p->status),
-        ]);
-
-        $paymentHistory = $payments->where('status', 'paid')->map(fn($p) => [
+        $paymentHistory = $payments->where('status', 'paid')->map(fn (FeePayment $p) => [
             'date'   => $p->paid_at?->format('M d, Y') ?? $p->updated_at->format('M d, Y'),
             'desc'   => $p->feeType?->name ?? $p->description ?? 'Fee Payment',
-            'amount' => $p->amount,
+            'amount' => (float) $p->amount,
             'method' => ucfirst(str_replace('_', ' ', $p->payment_method ?? 'cash')),
         ])->values();
 
         return response()->json([
             'total_due'       => $totalDue,
-            'total_paid'      => $totalPaid,
-            'outstanding'     => $outstanding,
+            'total_paid'      => $paidAmountForTerm,
+            'outstanding'     => (float) $outstanding,
             'fee_breakdown'   => $feeBreakdown,
             'payment_history' => $paymentHistory,
-            'is_paid_on_time' => $payments->where('status', 'paid')->isNotEmpty(),
+            'is_paid_on_time' => (float) $outstanding <= 0,
         ]);
     }
 
@@ -522,6 +541,57 @@ class StudentPortalController extends Controller
             $month <= 8  => '3rd Term',
             default      => '1st Term',
         };
+    }
+
+    private function resolveFeeTerm(Request $request, string $schoolId): string
+    {
+        $termId = trim((string) ($request->query('term_id', $request->input('term_id', ''))));
+        if ($termId !== '') {
+            $term = AcademicTerm::where('school_id', $schoolId)->find($termId);
+            if ($term) return (string) $term->id;
+        }
+
+        $activeTerm = AcademicTerm::where('school_id', $schoolId)
+            ->where(function ($query) {
+                $query->where('is_active', true)
+                    ->orWhere('status', 'Active');
+            })
+            ->orderByDesc('is_active')
+            ->orderByDesc('academic_year')
+            ->orderBy('name')
+            ->first();
+
+        if ($activeTerm) return (string) $activeTerm->id;
+
+        return $this->fallbackFeeTermKey();
+    }
+
+    private function feeAppliesToStudentClass(string $applicableClass, string $studentClassName): bool
+    {
+        $app = strtolower(trim($applicableClass));
+        $cls = strtolower(trim($studentClassName));
+
+        if ($app === '') return false;
+        if ($app === 'all classes' || $app === 'all grades') return true;
+        if ($cls === '') return false;
+
+        if ($app === $cls) return true;
+        if (str_contains($app, $cls)) return true;
+        if (str_contains($cls, $app)) return true;
+
+        return false;
+    }
+
+    private function fallbackFeeTermKey(): string
+    {
+        $month = now()->month;
+        $year  = now()->year;
+        $term  = match(true) {
+            $month <= 4  => 'Term 2',
+            $month <= 8  => 'Term 3',
+            default      => 'Term 1',
+        };
+        return "{$year}/{$term}";
     }
 
     private function currentSession(): string

@@ -17,6 +17,8 @@ use App\Models\TimetableSlot;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TeacherController extends Controller
 {
@@ -249,14 +251,29 @@ class TeacherController extends Controller
         $schoolId  = $request->user()->school_id;
         $staff     = $this->getStaff($request);
         $sectionId = $request->query('section_id');
+        $subjectId = $request->query('subject_id');
 
         if (!$staff) return response()->json(['message' => 'Staff record not found.'], 404);
+
+        if ($sectionId && $subjectId) {
+            $assignment = StaffSubjectAssignment::query()
+                ->where('staff_id', $staff->id)
+                ->where('school_id', $schoolId)
+                ->where('class_section_id', $sectionId)
+                ->where('subject_id', $subjectId)
+                ->first();
+
+            if ($assignment) {
+                $this->ensureDefaultAssessments($assignment, $schoolId, $staff->id);
+            }
+        }
 
         $query = Assessment::with(['subject', 'section'])
             ->where('staff_id', $staff->id)
             ->where('school_id', $schoolId);
 
         if ($sectionId) $query->where('class_section_id', $sectionId);
+        if ($subjectId) $query->where('subject_id', $subjectId);
 
         $assessments = $query->orderByDesc('date')->get()->map(fn($a) => [
             'id'         => (string) $a->id,
@@ -274,6 +291,87 @@ class TeacherController extends Controller
         ]);
 
         return response()->json($assessments);
+    }
+
+    private function ensureDefaultAssessments(StaffSubjectAssignment $assignment, string $schoolId, int $staffId): void
+    {
+        $term = $this->resolveCurrentAcademicTerm($schoolId);
+
+        $existing = Assessment::query()
+            ->where('school_id', $schoolId)
+            ->where('staff_id', $staffId)
+            ->where('class_section_id', $assignment->class_section_id)
+            ->where('subject_id', $assignment->subject_id)
+            ->where('academic_term', $term)
+            ->get();
+
+        $hasCa = $existing->where('category', 'CA')->count() > 0;
+        $hasExam = $existing->where('category', 'Exam')->count() > 0;
+
+        if (!$hasCa) {
+            foreach ([
+                ['title' => 'CA 1', 'max_marks' => 20, 'weight' => 20, 'date' => now()->subDays(7)->toDateString()],
+                ['title' => 'CA 2', 'max_marks' => 20, 'weight' => 20, 'date' => now()->toDateString()],
+            ] as $row) {
+                Assessment::firstOrCreate(
+                    [
+                        'school_id' => $schoolId,
+                        'staff_id' => $staffId,
+                        'class_section_id' => $assignment->class_section_id,
+                        'subject_id' => $assignment->subject_id,
+                        'academic_term' => $term,
+                        'title' => $row['title'],
+                    ],
+                    [
+                        'type' => 'CA',
+                        'category' => 'CA',
+                        'date' => $row['date'],
+                        'max_marks' => $row['max_marks'],
+                        'weight' => $row['weight'],
+                        'status' => 'grading',
+                    ]
+                );
+            }
+        }
+
+        if (!$hasExam) {
+            Assessment::firstOrCreate(
+                [
+                    'school_id' => $schoolId,
+                    'staff_id' => $staffId,
+                    'class_section_id' => $assignment->class_section_id,
+                    'subject_id' => $assignment->subject_id,
+                    'academic_term' => $term,
+                    'title' => 'Exam',
+                ],
+                [
+                    'type' => 'Exam',
+                    'category' => 'Exam',
+                    'date' => now()->addDays(7)->toDateString(),
+                    'max_marks' => 60,
+                    'weight' => 60,
+                    'status' => 'upcoming',
+                ]
+            );
+        }
+    }
+
+    private function resolveCurrentAcademicTerm(string $schoolId): string
+    {
+        try {
+            $current = trim((string) (DB::table('school_settings')->where('school_id', $schoolId)->value('current_term') ?? ''));
+            if ($current !== '') {
+                return $current;
+            }
+        } catch (\Throwable) {
+        }
+
+        $latest = trim((string) (Assessment::query()
+            ->where('school_id', $schoolId)
+            ->orderByDesc('date')
+            ->value('academic_term') ?? ''));
+
+        return $latest !== '' ? $latest : now()->format('Y') . '/Term 1';
     }
 
     /*
@@ -315,6 +413,12 @@ class TeacherController extends Controller
     */
     public function saveGrades(Request $request, Assessment $assessment): JsonResponse
     {
+        if (!$this->isAssessmentEntryAllowed((string) $request->user()->school_id)) {
+            throw ValidationException::withMessages([
+                'assessment' => 'Assessment score entry is currently turned off by the admin.',
+            ]);
+        }
+
         $request->validate([
             'grades'              => 'required|array',
             'grades.*.student_id' => 'required',
@@ -338,6 +442,19 @@ class TeacherController extends Controller
         }
 
         return response()->json(['message' => 'Grades saved successfully.']);
+    }
+
+    private function isAssessmentEntryAllowed(string $schoolId): bool
+    {
+        try {
+            $value = DB::table('school_settings')
+                ->where('school_id', $schoolId)
+                ->value('allow_assessment_entry');
+
+            return $value === null ? true : (bool) $value;
+        } catch (\Throwable) {
+            return true;
+        }
     }
 
     /*

@@ -14,6 +14,10 @@ class StudentGrade extends Model
         'school_id'
     ];
 
+    protected $casts = [
+        'marks' => 'float',
+    ];
+
     public function assessment() { 
         return $this->belongsTo(Assessment::class); 
     }

@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicClass;
 use App\Models\ClassSection;
 use App\Models\Student;
+use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class StudentController extends Controller
 {
@@ -23,7 +26,7 @@ class StudentController extends Controller
         $schoolId = $request->user()->school_id;
         $perPage  = min((int) $request->query('per_page', 20), 100);
 
-        $query = Student::with('section.academicClass')
+        $query = Student::with('section.academicClass', 'user')
             ->forSchool($schoolId)
             ->orderBy('first_name');
 
@@ -64,7 +67,7 @@ class StudentController extends Controller
     public function show(Request $request, Student $student): JsonResponse
     {
         abort_if($student->school_id !== $request->user()->school_id, 403);
-        $student->load('section.academicClass');
+        $student->load('section.academicClass', 'user');
         return response()->json(['data' => $this->detail($student)]);
     }
 
@@ -146,7 +149,7 @@ class StudentController extends Controller
             ], 422);
         }
 
-        $student->load('section.academicClass');
+        $student->load('section.academicClass', 'user');
 
         return response()->json([
             'message' => 'Student added.',
@@ -186,6 +189,10 @@ class StudentController extends Controller
             'medical_notes'     => 'nullable|string',
         ]);
 
+        if ($request->has('email')) {
+            $this->assertPortalEmailAvailable($student, trim((string) $request->email));
+        }
+
         // Handle avatar upload
         if ($request->hasFile('avatar') && $request->file('avatar')->isValid()) {
             if ($student->avatar) Storage::disk('public')->delete($student->avatar);
@@ -218,7 +225,8 @@ class StudentController extends Controller
                                         : $student->status,
         ])->save();
 
-        $student->load('section.academicClass');
+        $this->syncPortalUserFromStudent($student);
+        $student->load('section.academicClass', 'user');
 
         return response()->json([
             'message' => 'Student updated.',
@@ -237,6 +245,43 @@ class StudentController extends Controller
         if ($student->avatar) Storage::disk('public')->delete($student->avatar);
         $student->delete();
         return response()->json(['message' => 'Student deleted.']);
+    }
+
+    public function generatePortalCredentials(Request $request, Student $student): JsonResponse
+    {
+        abort_if($student->school_id !== $request->user()->school_id, 403);
+
+        $password = Str::password(10);
+        $credentials = $this->upsertStudentPortalAccount($student, $password);
+        $student->load('user');
+
+        return response()->json([
+            'message' => 'Student portal credentials generated.',
+            'data' => [
+                'student' => $this->detail($student),
+                'portal_credentials' => $credentials,
+            ],
+        ]);
+    }
+
+    public function updatePortalPassword(Request $request, Student $student): JsonResponse
+    {
+        abort_if($student->school_id !== $request->user()->school_id, 403);
+
+        $payload = $request->validate([
+            'password' => 'required|string|min:8|max:255',
+        ]);
+
+        $credentials = $this->upsertStudentPortalAccount($student, (string) $payload['password']);
+        $student->load('user');
+
+        return response()->json([
+            'message' => 'Student portal password updated.',
+            'data' => [
+                'student' => $this->detail($student),
+                'portal_credentials' => $credentials,
+            ],
+        ]);
     }
 
     /*
@@ -396,10 +441,121 @@ class StudentController extends Controller
         return response()->json($sections);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | POST /api/students/class-sections
+    |--------------------------------------------------------------------------
+    | Creates a class (if needed) and a section under it for the current school.
+    */
+    public function storeClassSection(Request $request): JsonResponse
+    {
+        $schoolId = $request->user()->school_id;
+
+        $request->validate([
+            'class_name'   => 'required|string|max:255',
+            'name'         => 'nullable|string|max:100',
+            'section_name' => 'nullable|string|max:100',
+            'capacity'     => 'nullable|integer|min:0',
+        ]);
+
+        $className = trim((string) $request->input('class_name'));
+        $sectionName = trim((string) ($request->input('name') ?: $request->input('section_name')));
+
+        if ($sectionName === '') {
+            return response()->json([
+                'message' => 'A section name is required.',
+                'errors'  => ['name' => ['A section name is required.']],
+            ], 422);
+        }
+
+        $class = AcademicClass::firstOrCreate(
+            ['school_id' => $schoolId, 'name' => $className],
+            [
+                'level'    => $className,
+                'order'    => ((int) AcademicClass::where('school_id', $schoolId)->max('order')) + 1,
+                'school_id'=> $schoolId,
+            ]
+        );
+
+        $section = ClassSection::firstOrCreate(
+            [
+                'school_id' => $schoolId,
+                'class_id'  => $class->id,
+                'name'      => $sectionName,
+            ],
+            [
+                'full_name' => trim($className . ' ' . $sectionName),
+                'capacity'  => $request->input('capacity'),
+                'school_id' => $schoolId,
+            ]
+        );
+
+        $section->load('academicClass');
+
+        return response()->json([
+            'message' => $section->wasRecentlyCreated ? 'Class section created.' : 'Class section already exists.',
+            'data'    => [
+                'id'         => $section->id,
+                'name'       => $section->name,
+                'full_name'  => $section->full_name,
+                'class_name' => $section->academicClass?->name ?? $className,
+            ],
+        ], $section->wasRecentlyCreated ? 201 : 200);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | DELETE /api/students/class-sections
+    |--------------------------------------------------------------------------
+    | Removes a class section. If the class has no more sections afterwards,
+    | the class record is removed too.
+    */
+    public function destroyClassSection(Request $request): JsonResponse
+    {
+        $schoolId = $request->user()->school_id;
+
+        $request->validate([
+            'id'               => 'nullable|integer',
+            'class_section_id' => 'nullable|integer',
+        ]);
+
+        $sectionId = (int) ($request->input('id') ?: $request->input('class_section_id'));
+
+        if ($sectionId <= 0) {
+            return response()->json([
+                'message' => 'A class section id is required.',
+                'errors'  => ['id' => ['A class section id is required.']],
+            ], 422);
+        }
+
+        $section = ClassSection::where('school_id', $schoolId)->findOrFail($sectionId);
+        $classId = $section->class_id;
+
+        $section->delete();
+
+        if ($classId) {
+            $hasSections = ClassSection::where('school_id', $schoolId)
+                ->where('class_id', $classId)
+                ->exists();
+
+            if (!$hasSections) {
+                AcademicClass::where('school_id', $schoolId)
+                    ->where('id', $classId)
+                    ->delete();
+            }
+        }
+
+        return response()->json(['message' => 'Class section removed.']);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private function row(Student $s): array
     {
+        $classSection = $s->relationLoaded('section')
+            ? $s->getRelation('section')
+            : $s->section()->with('academicClass')->first();
+
         return [
             'id'           => $s->student_id,
             'db_id'        => $s->id,
@@ -407,14 +563,16 @@ class StudentController extends Controller
             'first_name'   => $s->first_name,
             'last_name'    => $s->last_name,
             'admission_no' => $s->admission_no,
-            'grade'        => $s->section?->academicClass?->name ?? $s->grade ?? '—',
-            'section'      => $s->section?->name ?? $s->section ?? '—',
+            'grade'        => $classSection?->academicClass?->name ?? $s->grade ?? '—',
+            'section'      => $classSection?->name ?? $s->section ?? '—',
             'section_id'   => $s->class_section_id,
             'parent'       => $s->parent_name ?? '—',
             'status'       => ucfirst($s->status),
             'email'        => $s->email,
             'phone'        => $s->phone,
             'avatar_url'   => $s->avatar ? asset('storage/' . $s->avatar) : null,
+            'has_portal_account' => (bool) $s->user_id,
+            'portal_email' => $s->email,
         ];
     }
 
@@ -450,5 +608,109 @@ class StudentController extends Controller
             "{$uuid}.{$ext}"
         );
         return "schools/{$schoolId}/passports/students/{$uuid}.{$ext}";
+    }
+
+    private function syncPortalUserFromStudent(Student $student): void
+    {
+        if (!$student->user_id) {
+            return;
+        }
+
+        $user = $student->relationLoaded('user') ? $student->getRelation('user') : $student->user;
+        if (!$user) {
+            return;
+        }
+
+        $studentName = trim($student->first_name . ' ' . $student->last_name);
+        $nextEmail = trim((string) $student->email);
+
+        if ($nextEmail !== '' && $nextEmail !== $user->email) {
+            $this->assertPortalEmailAvailable($student, $nextEmail, $user->id);
+            $user->email = $nextEmail;
+        }
+
+        $user->name = $studentName;
+        $user->save();
+    }
+
+    private function upsertStudentPortalAccount(Student $student, string $plainPassword): array
+    {
+        $email = trim((string) $student->email);
+        if ($email === '') {
+            throw ValidationException::withMessages([
+                'email' => 'Student email is required before generating portal credentials.',
+            ]);
+        }
+
+        $studentName = trim($student->first_name . ' ' . $student->last_name);
+        $user = $student->user_id
+            ? User::find($student->user_id)
+            : User::where('email', $email)->first();
+
+        if ($user && $user->role !== 'student') {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already used by another non-student account.',
+            ]);
+        }
+
+        if ($user && (string) $user->school_id !== (string) $student->school_id) {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already linked to another school account.',
+            ]);
+        }
+
+        if ($user && Student::where('user_id', $user->id)->where('id', '!=', $student->id)->exists()) {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already linked to another student portal account.',
+            ]);
+        }
+
+        if (!$user) {
+            $user = User::create([
+                'name' => $studentName,
+                'email' => $email,
+                'password' => $plainPassword,
+                'role' => 'student',
+                'school_id' => $student->school_id,
+                'is_active' => true,
+            ]);
+        } else {
+            $user->update([
+                'name' => $studentName,
+                'email' => $email,
+                'password' => $plainPassword,
+                'role' => 'student',
+                'school_id' => $student->school_id,
+                'is_active' => true,
+            ]);
+        }
+
+        if ((int) $student->user_id !== (int) $user->id) {
+            $student->user_id = $user->id;
+            $student->save();
+        }
+
+        return [
+            'email' => $email,
+            'password' => $plainPassword,
+        ];
+    }
+
+    private function assertPortalEmailAvailable(Student $student, string $email, ?int $ignoreUserId = null): void
+    {
+        if ($email === '') {
+            return;
+        }
+
+        $query = User::where('email', $email);
+        if ($ignoreUserId) {
+            $query->where('id', '!=', $ignoreUserId);
+        }
+
+        if ($query->exists()) {
+            throw ValidationException::withMessages([
+                'email' => 'This email is already used by another portal account.',
+            ]);
+        }
     }
 }
