@@ -16,8 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions) {
-    $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, Request $request) {
-            if ($request->is('api/*')) {
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, Request $request) {
+            if (
+                $request->is('api/*')
+                || $request->expectsJson()
+                || $request->wantsJson()
+                || str_contains(strtolower((string) $request->header('accept')), 'application/json')
+            ) {
                 return response()->json([
                     'message' => 'Unauthenticated.',
                 ], 401);

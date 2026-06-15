@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\AcademicTerm;
 use App\Models\FeePayment;
 use App\Models\FeeType;
 use Carbon\Carbon;
@@ -22,7 +23,7 @@ class FeeController extends Controller
     public function dashboard(Request $request): JsonResponse
     {
         $schoolId    = $request->user()->school_id;
-        $currentTerm = $this->currentTerm();
+        $currentTerm = $this->resolveFeeTerm($request, $schoolId);
 
         // ── Stats ────────────────────────────────────────────────────────────
         $termPayments = FeePayment::where('school_id', $schoolId)
@@ -35,7 +36,7 @@ class FeeController extends Controller
         $overdueFees      = $termPayments->where('status', 'overdue')->sum('expected_amount');
 
         // Compare with previous term
-        $prevTerm        = $this->previousTerm();
+        $prevTerm        = $this->previousFeeTerm($schoolId, $currentTerm);
         $prevCollected   = FeePayment::where('school_id', $schoolId)
             ->where('academic_term', $prevTerm)
             ->where('status', 'paid')
@@ -51,13 +52,7 @@ class FeeController extends Controller
             ->where('academic_term', $currentTerm)
             ->orderBy('name')
             ->get()
-            ->map(fn($f) => [
-                'id'     => $f->id,
-                'name'   => $f->name,
-                'grade'  => $f->applicable_class,
-                'amount' => $f->amount,
-                'status' => ucfirst($f->status),
-            ]);
+            ->map(fn($f) => $this->mapFeeType($f));
 
         // ── Recent Transactions ──────────────────────────────────────────────
         $transactions = FeePayment::with('student')
@@ -77,6 +72,7 @@ class FeeController extends Controller
             ]);
 
         return response()->json([
+            'term'              => $currentTerm,
             'total_collected'   => $totalCollected,
             'total_change'      => $totalChange,
             'pending_clearance' => $pendingClearance,
@@ -87,7 +83,133 @@ class FeeController extends Controller
         ]);
     }
 
+    public function store(Request $request): JsonResponse
+    {
+        $schoolId = $request->user()->school_id;
+        $payload = $this->validateFeeType($request);
+
+        $feeType = FeeType::create([
+            'name'             => $payload['name'],
+            'applicable_class' => $payload['grade'],
+            'amount'           => $payload['amount'],
+            'status'           => $this->normalizeFeeStatus($payload['status']),
+            'academic_term'    => $this->resolveFeeTerm($request, $schoolId),
+            'school_id'        => $schoolId,
+        ]);
+
+        return response()->json([
+            'message' => 'Fee item created.',
+            'data'    => $this->mapFeeType($feeType),
+        ], 201);
+    }
+
+    public function update(Request $request, FeeType $feeType): JsonResponse
+    {
+        abort_if($feeType->school_id !== $request->user()->school_id, 403);
+
+        $payload = $this->validateFeeType($request);
+
+        $feeType->update([
+            'name'             => $payload['name'],
+            'applicable_class' => $payload['grade'],
+            'amount'           => $payload['amount'],
+            'status'           => $this->normalizeFeeStatus($payload['status']),
+        ]);
+
+        return response()->json([
+            'message' => 'Fee item updated.',
+            'data'    => $this->mapFeeType($feeType->fresh()),
+        ]);
+    }
+
+    public function destroy(Request $request, FeeType $feeType): JsonResponse
+    {
+        abort_if($feeType->school_id !== $request->user()->school_id, 403);
+
+        $feeType->delete();
+
+        return response()->json([
+            'message' => 'Fee item deleted.',
+        ]);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private function validateFeeType(Request $request): array
+    {
+        return $request->validate([
+            'name'   => 'required|string|max:255',
+            'grade'  => 'required|string|max:255',
+            'amount' => 'required|numeric|min:0.01',
+            'status' => 'required|string|max:20',
+        ]);
+    }
+
+    private function normalizeFeeStatus(?string $status): string
+    {
+        return match (strtolower(trim((string) $status))) {
+            'pending' => 'pending',
+            'overdue' => 'overdue',
+            default   => 'active',
+        };
+    }
+
+    private function mapFeeType(FeeType $feeType): array
+    {
+        return [
+            'id'     => $feeType->id,
+            'name'   => $feeType->name,
+            'grade'  => $feeType->applicable_class,
+            'amount' => (float) $feeType->amount,
+            'status' => ucfirst((string) $feeType->status),
+        ];
+    }
+
+    private function resolveFeeTerm(Request $request, string $schoolId): string
+    {
+        $termId = trim((string) ($request->query('term_id', $request->input('term_id', ''))));
+        if ($termId !== '') {
+            $term = AcademicTerm::where('school_id', $schoolId)->find($termId);
+            if ($term) {
+                return (string) $term->id;
+            }
+        }
+
+        $activeTerm = AcademicTerm::where('school_id', $schoolId)
+            ->where(function ($query) {
+                $query->where('is_active', true)
+                    ->orWhere('status', 'Active');
+            })
+            ->orderByDesc('is_active')
+            ->orderByDesc('academic_year')
+            ->orderBy('name')
+            ->first();
+
+        if ($activeTerm) {
+            return (string) $activeTerm->id;
+        }
+
+        return $this->currentTerm();
+    }
+
+    private function previousFeeTerm(string $schoolId, string $currentTerm): string
+    {
+        $terms = AcademicTerm::where('school_id', $schoolId)
+            ->orderByRaw("CASE WHEN is_active = 1 THEN 0 ELSE 1 END")
+            ->orderByDesc('academic_year')
+            ->orderBy('name')
+            ->get(['id']);
+
+        $currentIndex = $terms->search(fn (AcademicTerm $term) => (string) $term->id === $currentTerm);
+        if ($currentIndex !== false) {
+            $previous = $terms->get($currentIndex + 1);
+            if ($previous) {
+                return (string) $previous->id;
+            }
+        }
+
+        return $this->previousTerm();
+    }
 
     private function currentTerm(): string
     {

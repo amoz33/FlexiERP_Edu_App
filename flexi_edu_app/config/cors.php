@@ -6,7 +6,7 @@
 |--------------------------------------------------------------------------
 |
 | This file controls which origins, methods, and headers the API will
-| accept via CORS preflight. Update `allowed_origins` to match the exact
+| accept via CORS preflight. Update allowed_origins to match the exact
 | URL(s) where your Next.js app is hosted.
 |
 */

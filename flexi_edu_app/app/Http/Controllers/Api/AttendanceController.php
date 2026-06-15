@@ -36,14 +36,16 @@ class AttendanceController extends Controller
             ->whereIn('student_id', $students->pluck('id'))
             ->whereDate('date', $date)
             ->whereNull('period_number')
-            ->pluck('status', 'student_id');
+            ->get(['student_id', 'status', 'note'])
+            ->keyBy('student_id');
 
         $data = $students->map(fn($s) => [
             'id'     => (string) $s->id,
             'name'   => $s->first_name . ' ' . $s->last_name,
             'avatar' => strtoupper(substr($s->first_name, 0, 1) . substr($s->last_name, 0, 1)),
             'rollNo' => $s->student_id,   // admission/roll number shown in table
-            'status' => $this->mapStatus($existing->get($s->id, 'present')),
+            'status' => $this->mapStatus((string) optional($existing->get($s->id))->status ?: 'present'),
+            'note'   => (string) optional($existing->get($s->id))->note,
         ]);
 
         return response()->json($data);
@@ -64,6 +66,7 @@ class AttendanceController extends Controller
             'attendance'          => 'required|array',
             'attendance.*.student_id' => 'required',
             'attendance.*.status'     => 'required|in:P,A,L,H',
+            'attendance.*.note'       => 'nullable|string',
         ]);
 
         $schoolId  = $request->user()->school_id;
@@ -80,6 +83,7 @@ class AttendanceController extends Controller
                 [
                     'class_section_id' => $sectionId,
                     'status'           => $this->reverseMapStatus($record['status']),
+                    'note'             => $record['note'] ?? null,
                     'school_id'        => $schoolId,
                 ]
             );
