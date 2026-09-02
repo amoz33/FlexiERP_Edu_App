@@ -1,0 +1,8 @@
+export { default as DashboardSection } from './DashboardSection'
+export { default as AttendanceSection } from './AttendanceSection'
+export { default as ScheduleSection } from './ScheduleSection'
+export { default as AssessmentSection } from './AssessmentSection'
+export { default as GroupsSection } from './GroupsSection'
+export { default as PerformanceSection } from './PerformanceSection'
+export { default as LessonPlanSection } from './LessonPlanSection'
+export { default as MessagesSection } from './MessagesSection'
