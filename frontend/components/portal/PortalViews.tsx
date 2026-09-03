@@ -90,7 +90,7 @@ export function Dashboard({ role }: { role: RoleType }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <Card>
-          <CardLabel>Today's Timetable</CardLabel>
+          <CardLabel>Today&apos;s Timetable</CardLabel>
           {d.timetable.slice(0, 4).map((item, index) => (
             <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: index < 3 ? `1px solid ${BORDER}` : 'none' }}>
               <div style={{ width: 40, height: 40, borderRadius: 8, background: '#C9A02020', border: `1px solid #C9A02033`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -605,12 +605,12 @@ function StudentFocusedResultCard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card>
-          <CardLabel>Form Teacher's Remark</CardLabel>
+          <CardLabel>Form Teacher&apos;s Remark</CardLabel>
           <p style={{ margin: '0 0 10px', fontSize: 13, color: '#0D0D0D', lineHeight: 1.7, fontStyle: 'italic' }}>&quot;{rc.formTeacherRemark}&quot;</p>
           <p style={{ margin: 0, fontSize: 12, color: GOLD, fontWeight: 600 }}>{d.formTeacher}</p>
         </Card>
         <Card>
-          <CardLabel>Principal's Remark</CardLabel>
+          <CardLabel>Principal&apos;s Remark</CardLabel>
           <p style={{ margin: '0 0 10px', fontSize: 13, color: '#0D0D0D', lineHeight: 1.7, fontStyle: 'italic' }}>&quot;{rc.principalRemark}&quot;</p>
           <p style={{ margin: 0, fontSize: 12, color: GOLD, fontWeight: 600 }}>Mr. Babatunde Afolabi, Principal</p>
         </Card>

@@ -128,7 +128,7 @@ export default function DashboardPage() {
           {/* Attendance */}
           <div className="stat-card animate-in stagger-4">
             <div className="flex items-center justify-between">
-              <span className="stat-label">Today's Attendance</span>
+              <span className="stat-label">Today&apos;s Attendance</span>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#F7F6F3' }}>
                 <ClipboardCheck size={16} style={{ color: '#C9A020' }} />
               </div>

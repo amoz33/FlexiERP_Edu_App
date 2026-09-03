@@ -476,7 +476,7 @@ export default function StudentDashboard() {
       <div className="student-dashboard-main-grid" style={{ display: 'grid', gap: 16, alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 16 }}>
           <Card>
-            <CardLabel>Today's Schedule</CardLabel>
+            <CardLabel>Today&apos;s Schedule</CardLabel>
             <div style={{ display: 'grid', gap: 12 }}>
               {d.timetable.map((item, index) => (
                 <div key={index} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 12, alignItems: 'center' }}>
