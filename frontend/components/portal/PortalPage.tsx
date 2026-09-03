@@ -4,7 +4,7 @@ import Navbar from '@/components/layout/Navbar'
 import AppFooter from '@/components/layout/AppFooter'
 import PortalSidebar from './PortalSidebar'
 import { Dashboard, Subjects, Fees, Attendance, ReportCard, ParentSwitch, ParentNotifications, StudentProjects } from './PortalViews'
-import { SchemeOfWorkView } from '@/components/dashboard/StudentDashboard'
+import { SchemeOfWorkView } from '@/components/dashboard/SchemeOfWork'
 import { PageType, RoleType } from './portalTypes'
 
 const PAGE_TITLES: Record<PageType, string> = {

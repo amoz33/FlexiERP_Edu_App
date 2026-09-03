@@ -1,7 +1,7 @@
 'use client'
 
 import AppLayout from '@/components/layout/AppLayout'
-import { SchemeOfWorkView } from '@/components/dashboard/StudentDashboard'
+import { SchemeOfWorkView } from '@/components/dashboard/SchemeOfWork'
 
 export default function SchemeOfWorkPage() {
   return (
