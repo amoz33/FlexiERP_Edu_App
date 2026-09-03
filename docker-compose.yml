@@ -1,0 +1,65 @@
+# Brings up the full FlexiERP stack: MySQL + the Laravel backend +
+# the Next.js frontend, with one command:
+#
+#   docker compose up --build
+#
+# Frontend:  http://localhost:3000
+# Backend:   http://localhost:8000
+#
+# NOT verified by running docker compose in the environment this was
+# built in (no Docker available there) - written from standard patterns
+# for a Laravel + MySQL + Next.js stack. Confirm it comes up cleanly on
+# your machine and adjust as needed, especially the backend's DB_* env
+# vars if your app.php config expects different names.
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: flexi_edu_app
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - '3306:3306'
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uroot', '-proot']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: flexi_edu_app
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      APP_URL: http://localhost:8000
+    ports:
+      - '8000:8000'
+    command: >
+      sh -c "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      # Set your real PayStack public key here (or in a .env file
+      # referenced via env_file:) - payments won't initialize without it.
+      NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: ''
+    ports:
+      - '3000:3000'
+
+volumes:
+  db_data:
