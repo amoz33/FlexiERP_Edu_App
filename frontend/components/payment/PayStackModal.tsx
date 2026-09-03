@@ -87,7 +87,7 @@ export default function PayStackModal({
       },
       onClose: () => {
         const message = 'Payment was cancelled'
-        setPaymentStatus('idle')
+        setPaymentStatus('error')
         setErrorMessage(message)
         onError(message)
       },
