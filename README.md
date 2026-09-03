@@ -1,256 +1,104 @@
-# EduManage – Next.js Frontend
+# FlexiERP Edu App
 
-> School Management System — **Next.js 14 (App Router)** frontend connecting to **PHP Laravel** backend via REST API.
+Monorepo for the FlexiERP school management system: a Next.js 14 frontend
+(`frontend/`) and its Laravel 13 backend (`backend/`), merged from two
+previously separate repositories (`amoz33/FlexiERP_Edu_App` and
+`amoz33/FlexiERP_Edu_App_Server`) with both repos' commit history preserved
+via `git subtree`.
 
----
+- [`frontend/README.md`](./frontend/README.md) — install, run, test, lint, typecheck
+- [`backend/README.md`](./backend/README.md) — install, run, test, API surface, **repo hygiene notes**
 
-## 🎨 Brand
-- **Font:** Palatino Linotype (Palatino, Book Antiqua, Georgia fallbacks)
-- **Primary Color:** `#C9A020` (Gold)
-- **Background/Dark:** `#0D0D0D` (Near Black)
-- **Surface:** `#F7F6F3` (Warm Off-White)
-
----
-
-## 📁 Project Structure
-
-```
-edumanage/
-├── app/                        # Next.js App Router pages
-│   ├── layout.tsx              # Root layout
-│   ├── page.tsx                # Redirects → /dashboard
-│   ├── login/page.tsx          # Login screen
-│   ├── dashboard/page.tsx      # Admin dashboard
-│   ├── admission/page.tsx      # Admission portal
-│   ├── fee-management/page.tsx # Fee dashboard
-│   ├── academics/page.tsx      # Courses & subjects
-│   ├── attendance/page.tsx     # Attendance management
-│   ├── timetable/page.tsx      # Master timetable
-│   ├── staff/page.tsx          # Faculty directory
-│   ├── students/page.tsx       # Student information
-│   ├── messaging/page.tsx      # Internal messaging
-│   ├── reports/page.tsx        # Reporting & analytics
-│   ├── results/page.tsx        # Examination & results
-│   ├── report-card/page.tsx    # Student report card ★ NEW
-│   ├── inventory/page.tsx      # Inventory management
-│   ├── settings/page.tsx       # Class & term settings
-│   └── portal/page.tsx         # Portal links
-├── components/
-│   ├── layout/
-│   │   ├── Sidebar.tsx         # Navigation sidebar
-│   │   ├── Topbar.tsx          # Top header bar
-│   │   └── AppLayout.tsx       # Page wrapper
-│   └── Providers.tsx           # React Query + Toast
-├── lib/
-│   ├── api.ts                  # ⭐ ALL Laravel API pipelines
-│   ├── auth-store.ts           # Zustand auth state
-│   └── utils.ts                # Helpers
-├── tailwind.config.ts          # Brand colors + Palatino
-├── app/globals.css             # CSS variables & components
-├── .env.example
-└── README.md
-```
-
----
-
-## 🚀 Quick Start
+## Quick start (everything, one command)
 
 ```bash
-# 1. Install dependencies
-npm install
-
-# 2. Configure environment
-cp .env.example .env.local
-# Edit NEXT_PUBLIC_API_URL=http://your-laravel-app.test/api
-
-# 3. Run development server
-npm run dev
+docker compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — you'll be redirected to the login page.
+Frontend: http://localhost:3000 · Backend: http://localhost:8000
 
----
+This brings up MySQL, the Laravel backend (migrates then serves), and the
+Next.js frontend together. **Not verified by actually running Docker** —
+no Docker was available in the environment this was built in. Confirm it
+comes up cleanly on your machine.
 
-## 🔌 Laravel API Endpoints Expected
+## What changed in this merge
 
-All endpoints prefixed with `/api`. Auth via Bearer token (Laravel Sanctum compatible).
+**Security**
+- Patched `next` from `14.2.5` to `14.2.35` — the pinned version was
+  vulnerable to three publicly disclosed, real CVEs affecting all
+  Next.js 14.x App Router apps (CVE-2025-29927 middleware bypass;
+  CVE-2025-55184/67779 DoS; CVE-2025-55183 source exposure). Verified
+  the production build still compiles cleanly on the patched version.
+- Removed two ~407KB SQL dumps from the backend containing ~1,800
+  seeded demo accounts with bcrypt password hashes. Confirmed as demo
+  data, but raw password-hash dumps don't belong in a repo regardless.
 
-### Auth — `AuthController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/login` | Login, returns `{ token, user }` |
-| POST | `/auth/logout` | Invalidate token |
-| GET  | `/auth/me` | Get current user |
-| POST | `/auth/forgot-password` | Send reset email |
+**Repo structure (backend)**
+- The real Laravel app was nested one directory too deep
+  (`flexi_edu_app/`), with a stray root-level `composer.json` and 2,605
+  unrelated committed `vendor/` files from an accidental `composer
+  require` run outside the actual project. Flattened and cleaned up.
 
-### Dashboard — `DashboardController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/dashboard/overview` | Stats: students, staff, revenue, attendance |
-| GET | `/dashboard/activities` | Recent activity feed |
+**Bugs fixed (frontend)**
+- `PayStackModal.tsx`'s cancel handler set state back to `idle` instead
+  of `error`, so the "Payment was cancelled" message was set but never
+  actually shown to the user — found because a test written to cover
+  that path failed against real component behavior, not assumed.
 
-### Admission — `AdmissionController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/admissions` | List applications (paginated, filterable) |
-| POST | `/admissions` | Create new application |
-| GET | `/admissions/{id}` | Single application |
-| PUT | `/admissions/{id}` | Update application |
-| DELETE | `/admissions/{id}` | Delete application |
-| PUT | `/admissions/{id}/status` | Update status |
+**Missing config**
+- `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` was missing from `.env.example`
+  despite `PayStackModal.tsx` depending on it at runtime.
 
-### Fee Management — `FeeController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/fees/dashboard` | Fee totals & overdue |
-| GET | `/fees/breakdown` | Fee type breakdown |
-| GET | `/fees/transactions` | Recent transactions |
-| POST | `/fees/payments` | Record new payment |
-| GET | `/fees/payments/{id}` | Payment details |
+**Infrastructure**
+- Added ESLint config for the frontend (was entirely absent despite
+  `eslint` being an installed dependency) — fixed all 5 errors it found
+  (unescaped JSX apostrophes).
+- Added a real Jest + React Testing Library suite via `next/jest` — 17
+  tests, verified passing, covering `PayStackModal` (success/cancel/
+  missing-key paths) and `lib/utils.ts` (100% coverage).
+- Added `npm run typecheck` (`tsc --noEmit`) — clean.
+- Added GitHub Actions CI for both frontend (fully verified locally:
+  `npm ci` → lint → typecheck → test → build, all green, including a
+  clean install from wiped `node_modules`) and backend (Laravel/PHPUnit
+  — written from standard patterns but **not executable/verifiable**
+  here, no PHP available).
+- Added `docker-compose.yml` + Dockerfiles for both services.
 
-### Academics — `AcademicsController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/academics/classes` | Class tree structure |
-| GET | `/academics/subjects` | Subjects (filter by class/section) |
-| POST | `/academics/subjects` | Add subject |
-| PUT | `/academics/subjects/{id}` | Update subject |
-| DELETE | `/academics/subjects/{id}` | Delete subject |
+**Code cleanliness**
+- Split `PortalViews.tsx` (1,229 LOC, 9 unrelated components in one
+  file) into 8 files under `frontend/components/portal/views/`, each
+  with only the imports it actually needs.
+- Split `StudentDashboard.tsx` (556 LOC) by feature — it bundled the
+  actual student dashboard together with an unrelated scheme-of-work
+  feature that has its own routes and its own consumer
+  (`PortalPage.tsx`). Now `StudentDashboard.tsx` (293 lines) and
+  `SchemeOfWork.tsx` (378 lines), sharing one small data file.
+- Both splits verified afterward with `tsc --noEmit`, `next lint`,
+  a full production `build`, and the full Jest suite — all still
+  passing, same route output.
 
-### Attendance — `AttendanceController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/attendance/students` | Students list for class/section/date |
-| POST | `/attendance/save` | Save attendance records |
-| GET | `/attendance/summary` | Daily summary stats |
-| GET | `/attendance/report` | Monthly attendance report |
+## What this merge does *not* fix
 
-### Timetable — `TimetableController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/timetable` | Timetable for class/section |
-| POST | `/timetable/generate` | Auto-generate timetable |
-| PUT | `/timetable/{id}` | Update period |
+- **Backend test coverage.** Only Laravel's own default scaffolding
+  tests exist (`tests/Feature/ExampleTest.php`,
+  `tests/Unit/ExampleTest.php`). None of the 16 API controllers have
+  custom tests written for them yet.
+- **Frontend test coverage isn't comprehensive.** 17 tests cover one
+  component and one utility file — most of the app's pages and
+  components (including the newly-split `PortalViews`/`SchemeOfWork`
+  files) aren't covered.
+- **Docker and backend CI are unverified by me.** Both are written from
+  standard, well-established patterns, but I could not execute Docker
+  or PHP in the environment this was built in. Confirm both actually
+  work before relying on them.
 
-### Faculty/Staff — `StaffController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/staff` | Staff list (paginated, filterable) |
-| POST | `/staff` | Add staff member |
-| GET | `/staff/{id}` | Staff profile |
-| PUT | `/staff/{id}` | Update staff |
-| DELETE | `/staff/{id}` | Remove staff |
+## Repo history
 
-### Students — `StudentController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/students` | Student list (paginated, searchable) |
-| POST | `/students` | Enroll student |
-| GET | `/students/{id}` | Student profile |
-| PUT | `/students/{id}` | Update student |
-| DELETE | `/students/{id}` | Remove student |
-
-### Examinations & Results — `ExaminationController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/exams` | List exams |
-| POST | `/exams` | Create exam |
-| GET | `/exams/{id}/marks` | Get marks entry data |
-| POST | `/marks/save` | Save marks |
-| POST | `/exams/{id}/publish` | Toggle result visibility |
-| GET | `/report-card` | Get student report card data |
-| POST | `/report-card/generate` | Generate PDF (returns blob) |
-| POST | `/report-card/bulk-generate` | Bulk PDF generation (returns ZIP) |
-
-### Inventory — `InventoryController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/inventory` | Item list (filterable by category/status) |
-| POST | `/inventory` | Add item |
-| GET | `/inventory/{id}` | Item details |
-| PUT | `/inventory/{id}` | Update item |
-| DELETE | `/inventory/{id}` | Remove item |
-| POST | `/inventory/{id}/stock/add` | Add stock |
-| POST | `/inventory/{id}/issue` | Issue stock to department |
-
-### Messaging — `MessagingController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/messages/inbox` | Inbox messages |
-| GET | `/messages/sent` | Sent messages |
-| GET | `/messages/drafts` | Drafts |
-| GET | `/messages/{id}` | Single message |
-| POST | `/messages/send` | Send message |
-| POST | `/messages/bulk` | Bulk email send |
-| DELETE | `/messages/{id}` | Delete message |
-
-### Reports — `ReportController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/reports/analytics` | Aggregated analytics data |
-| GET | `/reports/enrollment` | Enrollment trends by quarter |
-| GET | `/reports/fee-collection` | Fee collection chart |
-| GET | `/reports/top-performers` | Top students |
-| GET | `/reports/attendance` | Attendance breakdown |
-| POST | `/reports/generate` | Generate PDF report (returns blob) |
-| GET | `/reports/export` | Export data CSV (returns blob) |
-
-### Settings — `SettingsController`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/settings/classes` | Class directory |
-| POST | `/settings/classes` | Add class |
-| PUT | `/settings/classes/{id}` | Update class |
-| GET | `/settings/terms` | Academic terms |
-| POST | `/settings/terms` | Add term |
-| PUT | `/settings/terms/{id}` | Update term |
-| GET | `/settings/notices` | Notice board |
-| POST | `/settings/notices` | Post notice |
-| DELETE | `/settings/notices/{id}` | Delete notice |
-
----
-
-## 🔐 Authentication Flow
-
-1. User submits login form → `POST /api/auth/login`
-2. Laravel returns `{ token: "...", user: {...} }`
-3. Token stored in `localStorage` as `edu_token`
-4. All subsequent requests include `Authorization: Bearer <token>` header
-5. On 401 response → user auto-redirected to `/login`
-
----
-
-## 🗄️ Suggested MySQL Tables
-
-```sql
-users, roles, students, staff, classes, sections, subjects,
-admissions, fee_types, fee_payments, timetable_periods,
-attendance_records, exams, exam_marks, inventory_items,
-inventory_transactions, messages, notices, academic_terms
+```
+git log --oneline --graph --all
 ```
 
----
-
-## 📦 Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `next` 14 | Framework |
-| `axios` | HTTP client |
-| `@tanstack/react-query` | Server state management |
-| `zustand` | Auth state (client) |
-| `lucide-react` | Icons |
-| `react-hot-toast` | Notifications |
-| `recharts` | Charts (reports page) |
-| `tailwindcss` | Styling |
-| `date-fns` | Date formatting |
-
----
-
-## 🖨️ Report Card Print
-
-The `/report-card` page includes a print stylesheet — clicking "Print Report Card" calls `window.print()` which hides the sidebar and topbar, showing only the report card document. For server-side PDF generation, wire `reportCardApi.generatePdf()` to your Laravel PDF controller (e.g. using Dompdf or Browsershot).
-
----
-
-*EduManage Administration System V2.4.1 — Built with Next.js 14 + PHP Laravel*
+shows both original repos' full commit history preserved as ancestry
+under `frontend/` and `backend/` prefixes, plus the merge and cleanup
+commits on top.
