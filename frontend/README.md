@@ -51,6 +51,14 @@ edumanage/
 └── README.md
 ```
 
+**Since this diagram was written:** `components/portal/PortalViews.tsx` (previously
+1,229 lines holding 9 unrelated view components) is now a thin barrel re-export;
+the actual components live under `components/portal/views/*.tsx`, one file each.
+Similarly, `components/dashboard/StudentDashboard.tsx` (previously 556 lines) now
+only contains the student dashboard itself - the scheme-of-work feature moved to
+`components/dashboard/SchemeOfWork.tsx`, with data shared between the two in
+`components/dashboard/dashboardData.ts`.
+
 ---
 
 ## 🚀 Quick Start
@@ -62,12 +70,36 @@ npm install
 # 2. Configure environment
 cp .env.example .env.local
 # Edit NEXT_PUBLIC_API_URL=http://your-laravel-app.test/api
+# Set NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY - required for the payment modal
+# (components/payment/PayStackModal.tsx) to initialize at all.
 
 # 3. Run development server
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) — you'll be redirected to the login page.
+
+Or bring up the whole stack (this frontend + the Laravel backend + MySQL)
+with one command from the repo root: `docker compose up --build`. See the
+[root README](../README.md) for details.
+
+---
+
+## 🧪 Test, Lint, Typecheck
+
+```bash
+npm test              # Jest + React Testing Library, run once
+npm test -- --watch   # watch mode
+npm test -- --coverage
+npm run lint           # next lint (ESLint)
+npm run typecheck      # tsc --noEmit
+npm run build          # production build - also type-checks and lints
+```
+
+Current test coverage: `components/payment/PayStackModal.tsx` (success,
+cancel, and missing-API-key paths) and `lib/utils.ts` (100% coverage).
+Most of the app's UI components and pages aren't covered yet - that's
+real, not implied by "has tests."
 
 ---
 

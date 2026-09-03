@@ -1,58 +1,85 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# FlexiERP Edu App (Backend)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel 13 API + Sanctum authentication backend for the FlexiERP school
+management system, serving the [FlexiERP_Edu_App Next.js frontend](../frontend).
 
-## About Laravel
+The default Laravel/Composer README this replaced didn't mention this
+project at all - see [`CLAUDE.md`](./CLAUDE.md) for AI-assistant setup
+notes that were already present.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Prerequisites
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- PHP 8.3+ (per `composer.json`'s `^8.3` requirement)
+- Composer
+- MySQL (or SQLite for local/testing - see below)
+- Node.js + npm (only needed if you're building frontend assets via Vite;
+  the actual frontend app is the separate Next.js project)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Install
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Default `.env.example` DB settings point at MySQL
+(`DB_DATABASE=flexi_edu_app`, `DB_USERNAME=root`, empty password) - update
+these for your local setup, or switch `DB_CONNECTION=sqlite` for a
+zero-config local database.
 
-## Contributing
+## Run
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+php artisan serve
+```
 
-## Code of Conduct
+Serves on `http://localhost:8000` by default. API routes are under `/api`
+(see `routes/api.php`).
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Test
 
-## Security Vulnerabilities
+```bash
+php artisan test
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+`phpunit.xml` already configures an in-memory SQLite database for the
+testing environment, so this doesn't touch your real database. Currently
+only Laravel's own default scaffolding tests exist
+(`tests/Feature/ExampleTest.php`, `tests/Unit/ExampleTest.php`) - no
+custom tests have been written for this app's actual controllers yet.
 
-## License
+## API surface
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Public (no auth): `POST /api/auth/*` (login/register), `GET
+/api/public/school`, `GET /api/public/classes`, `POST /api/admissions`.
+
+Everything else requires Sanctum auth (`auth:sanctum` middleware) - see
+`routes/api.php` for the full route list. Controllers live under
+`app/Http/Controllers/Api/`, one per feature area: Academics, Admission,
+Assignment, Attendance, Auth, Dashboard, Fee, Inventory, Payroll,
+Results, Settings, Staff, Student, StudentPortal, TeacherAssignment,
+Teacher.
+
+## Docker
+
+`docker compose up --build` from the repo root brings up this backend
+alongside MySQL and the frontend - see the [root README](../README.md).
+The `Dockerfile` in this directory was written from standard PHP/Laravel
+patterns but hasn't been run in the environment this was built in (no
+Docker available there) - confirm it builds cleanly on your machine.
+
+## Repo hygiene notes (fixed during the merge into this monorepo)
+
+- The real Laravel app used to sit one directory deeper
+  (`flexi_edu_app/`), with a stray root-level `composer.json` and 2,605
+  unrelated committed `vendor/` files from an accidental `composer
+  require` run in the wrong directory. Both are gone - this directory
+  *is* the app now.
+- Two ~407KB SQL dumps (`flexi_edu_app.sql`, `flexi_edu_app_clean.sql`)
+  containing ~1,800 seeded demo accounts with bcrypt password hashes
+  were removed. Confirmed as demo data, not real records, but raw dumps
+  with password hashes don't belong in a repo regardless. If you need
+  that seed data back, rebuild it as a proper Laravel seeder in
+  `database/seeders/` instead of a raw SQL dump.
